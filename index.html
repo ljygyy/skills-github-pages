@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生成绩查询 (在线数据)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: "Inter", "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .message-box {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            transform: translate(-50%, -20px);
+        }
+        .message-box.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        .message-box.success { background-color: #4CAF50; color: white; }
+        .message-box.error { background-color: #f44336; color: white; }
+        .message-box.info { background-color: #2196F3; color: white; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div id="app-container" class="w-full max-w-lg bg-white shadow-xl rounded-lg p-6 md:p-8">
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-700">学生成绩查询系统</h1>
+        </header>
+
+        <div id="initialLoadingMessage" class="text-center py-4">
+            <p class="text-gray-600">正在加载学生数据，请稍候...</p>
+            <div class="loader mt-2"></div>
+        </div>
+        
+        <fieldset id="querySection" disabled class="mb-6 opacity-50 transition-opacity duration-300 hidden">
+            <label for="searchInput" class="block text-sm font-medium text-gray-600 mb-1">查询条件:</label>
+            <input type="text" id="searchInput" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-150" placeholder="请输入准考证号或姓名">
+            <button id="queryButton" class="mt-3 w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-150 ease-in-out">
+                查询成绩
+            </button>
+        </fieldset>
+        
+        <div id="queryLoadingIndicator" class="loader hidden"></div>
+        <div id="messageBox" class="message-box"></div>
+        <div id="resultsContainer" class="mt-6"></div>
+    </div>
+
+    <footer class="mt-8 text-center text-sm text-gray-500">
+        <p>&copy; 2025 学生成绩查询平台</p>
+        <p class="text-xs">请确保JSON文件服务器已配置CORS策略以允许跨域访问。</p>
+    </footer>
+
+    <script>
+        let studentData = [];
+        // !重要: 将下面的URL替换为你的JSON文件的实际链接
+        const jsonDataUrl = 'https://lz.qaiu.top/parser?url=https://wwov.lanzoum.com/iHDR42xrk00d'; 
+
+        const querySection = document.getElementById('querySection');
+        const searchInput = document.getElementById('searchInput');
+        const queryButton = document.getElementById('queryButton');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const queryLoadingIndicator = document.getElementById('queryLoadingIndicator');
+        const initialLoadingMessage = document.getElementById('initialLoadingMessage');
+        const messageBox = document.getElementById('messageBox');
+        let messageTimeout;
+
+        function showMessage(message, type = 'info', duration = 3000) {
+            clearTimeout(messageTimeout);
+            messageBox.textContent = message;
+            messageBox.className = 'message-box show'; 
+            if (type === 'success') messageBox.classList.add('success');
+            else if (type === 'error') messageBox.classList.add('error');
+            else messageBox.classList.add('info');
+            messageTimeout = setTimeout(() => messageBox.classList.remove('show'), duration);
+        }
+
+        async function loadStudentData() {
+            if (jsonDataUrl === 'YOUR_JSON_FILE_URL_HERE') {
+                initialLoadingMessage.innerHTML = '<p class="text-red-500 font-semibold">错误：请在代码中配置JSON文件的正确URL。</p>';
+                showMessage('JSON文件URL未配置。', 'error', 5000);
+                return;
+            }
+
+            try {
+                const response = await fetch(jsonDataUrl);
+                if (!response.ok) {
+                    // response.status 提供了HTTP状态码，例如404 (Not Found), 500 (Server Error)
+                    // response.statusText 提供了状态文本
+                    throw new Error(`HTTP错误! 状态: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                
+                if (Array.isArray(data) && data.length > 0) {
+                    studentData = data;
+                    initialLoadingMessage.classList.add('hidden');
+                    querySection.disabled = false;
+                    querySection.classList.remove('opacity-50', 'hidden');
+                    showMessage(`成功加载 ${studentData.length} 条学生数据!`, 'success');
+                    searchInput.focus();
+                } else if (Array.isArray(data) && data.length === 0) {
+                     throw new Error("JSON文件数据为空或不是预期的数组格式。");
+                } 
+                else {
+                    throw new Error("加载的数据格式不正确，期望得到一个学生数组。");
+                }
+            } catch (error) {
+                console.error("加载学生数据失败:", error);
+                initialLoadingMessage.innerHTML = `<p class="text-red-500 font-semibold">加载学生数据失败: ${error.message}<br>请检查URL是否正确，以及服务器是否配置了CORS策略。</p>`;
+                showMessage(`加载数据失败: ${error.message}`, 'error', 7000);
+                studentData = [];
+            }
+        }
+
+        function queryScores() {
+            if (studentData.length === 0) {
+                showMessage('学生数据尚未加载或加载失败。', 'error');
+                return;
+            }
+
+            const query = searchInput.value.trim().toLowerCase();
+            resultsContainer.innerHTML = ''; 
+            queryLoadingIndicator.classList.remove('hidden');
+
+            if (!query) {
+                queryLoadingIndicator.classList.add('hidden');
+                showMessage('请输入查询条件 (准考证号或姓名)。', 'error');
+                return;
+            }
+            
+            setTimeout(() => {
+                const foundStudents = studentData.filter(student => 
+                    (student["准考证号"] && student["准考证号"].toLowerCase() === query) || 
+                    (student["姓名"] && student["姓名"].toLowerCase().includes(query))
+                );
+                queryLoadingIndicator.classList.add('hidden');
+
+                if (foundStudents.length > 0) {
+                    let htmlContent = `<h2 class="text-xl font-semibold text-gray-700 mb-4">查询结果 (${foundStudents.length} 条):</h2>`;
+                    foundStudents.forEach(student => {
+                        htmlContent += `
+                            <div class="bg-gray-50 p-4 rounded-lg shadow mb-4">
+                                <h3 class="text-lg font-bold text-blue-600">${student["姓名"] || 'N/A'}</h3>
+                                <p class="text-sm text-gray-600 mb-2">准考证号: ${student["准考证号"] || 'N/A'}</p>
+                                <ul class="list-disc list-inside space-y-1 text-gray-700">`;
+                        if (student.scores && typeof student.scores === 'object') {
+                            for (const subject in student.scores) {
+                                htmlContent += `<li><strong>${subject}:</strong> ${student.scores[subject]}</li>`;
+                            }
+                        } else {
+                            htmlContent += `<li>成绩数据格式不正确或缺失。</li>`;
+                        }
+                        htmlContent += `</ul></div>`;
+                    });
+                    resultsContainer.innerHTML = htmlContent;
+                    showMessage(`查询到 ${foundStudents.length} 条记录。`, 'success');
+                } else {
+                    resultsContainer.innerHTML = '<p class="text-center text-gray-500 py-4">未找到符合条件的学生信息。</p>';
+                    showMessage('未找到相关学生信息。', 'info');
+                }
+            }, 300); 
+        }
+
+        queryButton.addEventListener('click', queryScores);
+        searchInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter' && !querySection.disabled) {
+                queryScores();
+            }
+        });
+
+        // 页面加载时自动加载数据
+        document.addEventListener('DOMContentLoaded', loadStudentData);
+
+    </script>
+</body>
+</html>
